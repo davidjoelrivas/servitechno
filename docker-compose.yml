@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: servitechno
+      POSTGRES_USER: servitechno
+      POSTGRES_PASSWORD: servitechno
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - servitechno_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U servitechno -d servitechno"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  servitechno_postgres:
+

@@ -1,0 +1,39 @@
+{
+  "name": "servitechno-erp",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.20.0",
+  "scripts": {
+    "dev": "pnpm --parallel --filter @servitechno/api --filter @servitechno/web dev",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "db:generate": "pnpm --filter @servitechno/api prisma:generate",
+    "db:migrate": "pnpm --filter @servitechno/api prisma:migrate",
+    "db:seed": "pnpm --filter @servitechno/api prisma:seed",
+    "local:up": "bash scripts/local-up.sh",
+    "local:down": "bash scripts/local-down.sh",
+    "local:check": "bash scripts/local-check.sh",
+    "local:logs": "bash scripts/local-logs.sh",
+    "local:restart": "bash scripts/local-restart.sh",
+    "local:backup": "bash scripts/local-backup.sh",
+    "local:use-demo": "bash scripts/local-use-demo.sh",
+    "local:use-main": "bash scripts/local-use-main.sh",
+    "local:reset-demo": "bash scripts/local-reset-demo.sh",
+    "local:test:prepare": "bash scripts/local-test-prepare.sh",
+    "local:test": "bash scripts/local-test.sh",
+    "qa:browser": "node scripts/browser-qa.mjs"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "argon2",
+      "esbuild",
+      "prisma"
+    ]
+  },
+  "devDependencies": {
+    "playwright-core": "^1.65.0"
+  }
+}

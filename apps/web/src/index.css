@@ -1,0 +1,25 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 210 40% 98%; --foreground: 210 50% 12%; --card: 0 0% 100%; --card-foreground: 210 50% 12%;
+    --primary: 195 85% 36%; --primary-foreground: 0 0% 100%; --muted: 210 30% 94%; --muted-foreground: 210 15% 42%;
+    --border: 210 25% 88%; --destructive: 0 72% 51%; --destructive-foreground: 0 0% 100%;
+  }
+  * { @apply border-border; }
+  body { @apply bg-background text-foreground antialiased; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+  input, select, textarea { @apply rounded-md border-border bg-white text-sm shadow-sm focus:border-primary focus:ring-primary; }
+}
+
+@layer components {
+  .page-title { @apply text-2xl font-semibold tracking-tight; }
+  .field { @apply grid gap-1.5; }
+  .field label { @apply text-sm font-medium; }
+  .error { @apply text-xs text-destructive; }
+  .data-table { @apply w-full text-sm; }
+  .data-table th { @apply bg-muted/60 px-4 py-3 text-left font-medium text-muted-foreground; }
+  .data-table td { @apply border-t px-4 py-3; }
+}
+

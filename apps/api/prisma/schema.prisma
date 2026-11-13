@@ -1,0 +1,776 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum SaleStatus {
+  DRAFT
+  CONFIRMED
+  PARTIALLY_PAID
+  PAID
+  PARTIALLY_REFUNDED
+  VOIDED
+  REFUNDED
+}
+
+enum SaleReturnType {
+  RETURN
+  VOID
+}
+
+enum PurchaseStatus {
+  CONFIRMED
+  PARTIALLY_PAID
+  PAID
+  VOIDED
+}
+
+enum RepairStatus {
+  RECEIVED
+  PENDING_DIAGNOSIS
+  DIAGNOSING
+  WAITING_APPROVAL
+  APPROVED
+  REPAIRING
+  WAITING_PART
+  REPAIRED
+  READY
+  DELIVERED
+  CANCELLED
+}
+
+enum CashSessionStatus {
+  OPEN
+  CLOSED
+}
+
+enum CashMovementType {
+  OPENING
+  SALE_COLLECTION
+  REPAIR_COLLECTION
+  EXPENSE
+  CASH_IN
+  CASH_OUT
+  WITHDRAWAL
+  TRANSFER_IN
+  TRANSFER_OUT
+  REFUND
+  PURCHASE_PAYMENT
+  COMMISSION_PAYMENT
+}
+
+enum InventoryMovementType {
+  PURCHASE
+  SALE
+  REPAIR_CONSUMPTION
+  RETURN
+  ADJUSTMENT
+}
+
+enum PaymentDirection {
+  IN
+  OUT
+}
+
+enum CommissionStatus {
+  PENDING
+  APPROVED
+  PARTIALLY_PAID
+  PAID
+  VOIDED
+}
+
+enum JournalStatus {
+  POSTED
+  REVERSED
+}
+
+enum ProductDocumentType {
+  OTHER
+  PHONE
+  ACCESSORY
+  COMPUTER
+}
+
+enum ProductCondition {
+  NEW
+  USED
+}
+
+enum RepairPartSource {
+  INVENTORY
+  MANUAL
+}
+
+enum DocumentType {
+  SALE_RECEIPT
+  SALE_WARRANTY
+  REPAIR_INTAKE
+  REPAIR_RECEIPT
+  REPAIR_WARRANTY
+  PAYMENT_RECEIPT
+}
+
+model User {
+  id           String     @id @default(cuid())
+  email        String     @unique
+  passwordHash String
+  name         String
+  phone        String?
+  active       Boolean    @default(true)
+  sessionVersion Int      @default(1)
+  roles        UserRole[]
+  permissionOverrides UserPermission[]
+  employee     Employee?
+  auditLogs    AuditLog[]
+  repairEvidence RepairEvidence[]
+  assistantConversations AssistantConversation[]
+  assistantProposals AssistantProposal[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+}
+
+model AssistantConversation {
+  id            String             @id @default(cuid())
+  userId        String
+  user          User               @relation(fields: [userId], references: [id])
+  title         String?
+  archived      Boolean            @default(false)
+  messages      AssistantMessage[]
+  proposals     AssistantProposal[]
+  lastMessageAt DateTime           @default(now())
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  @@index([userId, lastMessageAt])
+}
+
+model AssistantMessage {
+  id             String                @id @default(cuid())
+  conversationId String
+  conversation   AssistantConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String
+  content        String
+  metadata       Json?
+  createdAt      DateTime              @default(now())
+
+  @@index([conversationId, createdAt])
+}
+
+model AssistantProposal {
+  id               String                @id @default(cuid())
+  conversationId   String
+  conversation     AssistantConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  userId           String
+  user             User                  @relation(fields: [userId], references: [id])
+  type             String
+  status           String                @default("PENDING")
+  payload          Json
+  summary          Json
+  idempotencyKey   String                @unique
+  sessionVersion   Int
+  permissions      Json
+  expiresAt        DateTime
+  executedAt       DateTime?
+  result           Json?
+  failureReason    String?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  @@index([userId, status, createdAt])
+  @@index([conversationId, createdAt])
+}
+
+model Role {
+  id          String           @id @default(cuid())
+  name        String           @unique
+  description String?
+  users       UserRole[]
+  permissions RolePermission[]
+}
+
+model Permission {
+  id          String           @id @default(cuid())
+  code        String           @unique
+  description String?
+  roles       RolePermission[]
+  users       UserPermission[]
+}
+
+model UserPermission {
+  userId       String
+  permissionId String
+  allowed      Boolean
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([userId, permissionId])
+}
+
+model UserRole {
+  userId String
+  roleId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+model Employee {
+  id          String                 @id @default(cuid())
+  userId      String?                @unique
+  user        User?                  @relation(fields: [userId], references: [id])
+  name        String
+  position    String
+  active      Boolean                @default(true)
+  baseSalary  Decimal?               @db.Decimal(14, 2)
+  commissionPercentage Decimal?      @db.Decimal(7, 4)
+  commissionBasis String             @default("CONTRIBUTION_MARGIN")
+  commissionNote String?
+  repairs     RepairOrder[]
+  commissions CommissionAllocation[]
+  createdAt   DateTime               @default(now())
+}
+
+model Customer {
+  id        String        @id @default(cuid())
+  name      String
+  phone     String?
+  email     String?
+  taxId     String?
+  address   String?
+  sales     Sale[]
+  repairs   RepairOrder[]
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@index([name])
+  @@index([phone])
+}
+
+model Supplier {
+  id          String       @id @default(cuid())
+  name        String
+  contact     String?
+  phone       String?
+  email       String?
+  products    Product[]
+  purchases   Purchase[]
+  repairParts RepairPart[]
+  createdAt   DateTime     @default(now())
+
+  @@index([name])
+}
+
+model Category {
+  id       String    @id @default(cuid())
+  name     String    @unique
+  products Product[]
+}
+
+model Product {
+  id            String              @id @default(cuid())
+  sku           String              @unique
+  name          String
+  description   String?
+  categoryId    String?
+  category      Category?           @relation(fields: [categoryId], references: [id])
+  supplierId    String?
+  supplier      Supplier?           @relation(fields: [supplierId], references: [id])
+  salePrice     Decimal             @db.Decimal(14, 2)
+  averageCost   Decimal             @default(0) @db.Decimal(14, 2)
+  stock         Decimal             @default(0) @db.Decimal(14, 3)
+  reserved      Decimal             @default(0) @db.Decimal(14, 3)
+  minimumStock  Decimal             @default(0) @db.Decimal(14, 3)
+  active        Boolean             @default(true)
+  documentType  ProductDocumentType @default(OTHER)
+  condition     ProductCondition    @default(NEW)
+  warrantyDays  Int?
+  saleItems     SaleItem[]
+  movements     InventoryMovement[]
+  repairParts   RepairPart[]
+  purchaseItems PurchaseItem[]
+  returnItems   SaleReturnItem[]
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  @@index([name])
+}
+
+model InventoryMovement {
+  id            String                @id @default(cuid())
+  productId     String
+  product       Product               @relation(fields: [productId], references: [id])
+  type          InventoryMovementType
+  quantity      Decimal               @db.Decimal(14, 3)
+  unitCost      Decimal               @db.Decimal(14, 2)
+  referenceType String
+  referenceId   String
+  note          String?
+  createdAt     DateTime              @default(now())
+
+  @@index([productId, createdAt])
+  @@index([referenceType, referenceId])
+}
+
+model Sale {
+  id            String       @id @default(cuid())
+  assistantProposalId String? @unique
+  number        Int          @unique @default(autoincrement())
+  customerId    String?
+  customer      Customer?    @relation(fields: [customerId], references: [id])
+  userId        String
+  status        SaleStatus   @default(DRAFT)
+  subtotal      Decimal      @db.Decimal(14, 2)
+  discount      Decimal      @default(0) @db.Decimal(14, 2)
+  tax           Decimal      @default(0) @db.Decimal(14, 2)
+  total         Decimal      @db.Decimal(14, 2)
+  paid          Decimal      @default(0) @db.Decimal(14, 2)
+  balance       Decimal      @default(0) @db.Decimal(14, 2)
+  returnedTotal Decimal      @default(0) @db.Decimal(14, 2)
+  items         SaleItem[]
+  payments      Payment[]
+  returns       SaleReturn[]
+  createdAt     DateTime     @default(now())
+  confirmedAt   DateTime?
+
+  @@index([createdAt])
+}
+
+model SaleItem {
+  id               String           @id @default(cuid())
+  saleId           String
+  sale             Sale             @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  productId        String
+  product          Product          @relation(fields: [productId], references: [id])
+  quantity         Decimal          @db.Decimal(14, 3)
+  unitPrice        Decimal          @db.Decimal(14, 2)
+  unitCost         Decimal          @db.Decimal(14, 2)
+  discount         Decimal          @default(0) @db.Decimal(14, 2)
+  total            Decimal          @db.Decimal(14, 2)
+  returnedQuantity Decimal          @default(0) @db.Decimal(14, 3)
+  serial           String?
+  color            String?
+  capacity         String?
+  specifications   String?
+  warrantyDays     Int?
+  returnItems      SaleReturnItem[]
+}
+
+model PaymentMethod {
+  id                 String              @id @default(cuid())
+  code               String              @unique
+  name               String
+  isCash             Boolean             @default(false)
+  financialAccountId String?
+  financialAccount   FinancialAccount?   @relation(fields: [financialAccountId], references: [id])
+  payments           Payment[]
+  commissionPayments CommissionPayment[]
+}
+
+model Payment {
+  id             String           @id @default(cuid())
+  assistantProposalId String?      @unique
+  idempotencyKey String           @unique
+  methodId       String
+  method         PaymentMethod    @relation(fields: [methodId], references: [id])
+  direction      PaymentDirection
+  amount         Decimal          @db.Decimal(14, 2)
+  saleId         String?
+  sale           Sale?            @relation(fields: [saleId], references: [id])
+  repairId       String?
+  repair         RepairOrder?     @relation(fields: [repairId], references: [id])
+  purchaseId     String?
+  purchase       Purchase?        @relation(fields: [purchaseId], references: [id])
+  saleReturnId   String?
+  saleReturn     SaleReturn?      @relation(fields: [saleReturnId], references: [id])
+  reference      String?
+  receivedById   String?
+  createdAt      DateTime         @default(now())
+
+  @@index([createdAt])
+}
+
+model SaleReturn {
+  id           String           @id @default(cuid())
+  number       Int              @unique @default(autoincrement())
+  saleId       String
+  sale         Sale             @relation(fields: [saleId], references: [id])
+  type         SaleReturnType   @default(RETURN)
+  reason       String
+  total        Decimal          @db.Decimal(14, 2)
+  arReduction  Decimal          @default(0) @db.Decimal(14, 2)
+  refundAmount Decimal          @default(0) @db.Decimal(14, 2)
+  creditAmount Decimal          @default(0) @db.Decimal(14, 2)
+  createdById  String
+  items        SaleReturnItem[]
+  payments     Payment[]
+  createdAt    DateTime         @default(now())
+
+  @@index([saleId, createdAt])
+}
+
+model SaleReturnItem {
+  id           String     @id @default(cuid())
+  saleReturnId String
+  saleReturn   SaleReturn @relation(fields: [saleReturnId], references: [id], onDelete: Cascade)
+  saleItemId   String
+  saleItem     SaleItem   @relation(fields: [saleItemId], references: [id])
+  productId    String
+  product      Product    @relation(fields: [productId], references: [id])
+  quantity     Decimal    @db.Decimal(14, 3)
+  unitPrice    Decimal    @db.Decimal(14, 2)
+  unitCost     Decimal    @db.Decimal(14, 2)
+  total        Decimal    @db.Decimal(14, 2)
+  restocked    Boolean    @default(false)
+}
+
+model Purchase {
+  id         String         @id @default(cuid())
+  assistantProposalId String? @unique
+  number     Int            @unique @default(autoincrement())
+  supplierId String
+  supplier   Supplier       @relation(fields: [supplierId], references: [id])
+  userId     String
+  status     PurchaseStatus @default(CONFIRMED)
+  subtotal   Decimal        @db.Decimal(14, 2)
+  total      Decimal        @db.Decimal(14, 2)
+  paid       Decimal        @default(0) @db.Decimal(14, 2)
+  balance    Decimal        @default(0) @db.Decimal(14, 2)
+  dueAt      DateTime?
+  reference  String?
+  notes      String?
+  items      PurchaseItem[]
+  payments   Payment[]
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  @@index([supplierId, createdAt])
+  @@index([status, dueAt])
+}
+
+model PurchaseItem {
+  id         String   @id @default(cuid())
+  purchaseId String
+  purchase   Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id])
+  quantity   Decimal  @db.Decimal(14, 3)
+  unitCost   Decimal  @db.Decimal(14, 2)
+  total      Decimal  @db.Decimal(14, 2)
+}
+
+model CashRegister {
+  id       String        @id @default(cuid())
+  name     String        @unique
+  active   Boolean       @default(true)
+  sessions CashSession[]
+}
+
+model CashSession {
+  id             String            @id @default(cuid())
+  registerId     String
+  register       CashRegister      @relation(fields: [registerId], references: [id])
+  openedById     String
+  closedById     String?
+  status         CashSessionStatus @default(OPEN)
+  openingBalance Decimal           @db.Decimal(14, 2)
+  expectedCash   Decimal?          @db.Decimal(14, 2)
+  countedCash    Decimal?          @db.Decimal(14, 2)
+  difference     Decimal?          @db.Decimal(14, 2)
+  closingNote    String?
+  openedAt       DateTime          @default(now())
+  closedAt       DateTime?
+  movements      CashMovement[]
+
+  @@index([registerId, status])
+}
+
+model CashMovement {
+  id            String           @id @default(cuid())
+  sessionId     String
+  session       CashSession      @relation(fields: [sessionId], references: [id])
+  type          CashMovementType
+  amount        Decimal          @db.Decimal(14, 2)
+  description   String
+  referenceType String?
+  referenceId   String?
+  userId        String
+  createdAt     DateTime         @default(now())
+
+  @@index([sessionId, createdAt])
+}
+
+model RepairOrder {
+  id                 String                 @id @default(cuid())
+  number             Int                    @unique @default(autoincrement())
+  customerId         String
+  customer           Customer               @relation(fields: [customerId], references: [id])
+  technicianId       String?
+  technician         Employee?              @relation(fields: [technicianId], references: [id])
+  receivedById       String
+  deviceType         String
+  brand              String?
+  model              String?
+  serial             String?
+  reportedProblem    String
+  physicalCondition  String?
+  conditionChecklist Json?
+  accessories        String?
+  serviceRequested   String?
+  diagnosis          String?
+  workPerformed      String?
+  status             RepairStatus           @default(RECEIVED)
+  estimatedPrice     Decimal?               @db.Decimal(14, 2)
+  finalPrice         Decimal?               @db.Decimal(14, 2)
+  partsCost          Decimal                @default(0) @db.Decimal(14, 2)
+  paid               Decimal                @default(0) @db.Decimal(14, 2)
+  balance            Decimal                @default(0) @db.Decimal(14, 2)
+  dueAt              DateTime?
+  deliveredAt        DateTime?
+  parts              RepairPart[]
+  events             RepairEvent[]
+  payments           Payment[]
+  commissions        CommissionAllocation[]
+  evidence           RepairEvidence[]
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+
+  @@index([status, createdAt])
+}
+
+model RepairEvidence {
+  id           String      @id @default(cuid())
+  repairId     String
+  repair       RepairOrder @relation(fields: [repairId], references: [id], onDelete: Cascade)
+  originalName String
+  storedName   String      @unique
+  mimeType     String
+  size         Int
+  createdById  String
+  createdBy    User        @relation(fields: [createdById], references: [id])
+  createdAt    DateTime    @default(now())
+
+  @@index([repairId, createdAt])
+}
+
+model RepairPart {
+  id                  String           @id @default(cuid())
+  repairId            String
+  repair              RepairOrder      @relation(fields: [repairId], references: [id], onDelete: Cascade)
+  source              RepairPartSource @default(INVENTORY)
+  productId           String?
+  product             Product?         @relation(fields: [productId], references: [id])
+  supplierId          String?
+  supplier            Supplier?        @relation(fields: [supplierId], references: [id])
+  description         String
+  quantity            Decimal          @db.Decimal(14, 3)
+  unitCost            Decimal          @db.Decimal(14, 2)
+  unitPrice           Decimal          @default(0) @db.Decimal(14, 2)
+  costAlreadyRecorded Boolean          @default(false)
+  registeredById      String
+}
+
+model RepairEvent {
+  id        String       @id @default(cuid())
+  repairId  String
+  repair    RepairOrder  @relation(fields: [repairId], references: [id], onDelete: Cascade)
+  status    RepairStatus
+  note      String?
+  userId    String
+  createdAt DateTime     @default(now())
+
+  @@index([repairId, createdAt])
+}
+
+model ExpenseCategory {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  accountCode String
+  expenses    Expense[]
+}
+
+model Expense {
+  id         String          @id @default(cuid())
+  categoryId String
+  category   ExpenseCategory @relation(fields: [categoryId], references: [id])
+  concept    String
+  amount     Decimal         @db.Decimal(14, 2)
+  methodId   String
+  userId     String
+  approved   Boolean         @default(true)
+  assistantProposalId String? @unique
+  createdAt  DateTime        @default(now())
+
+  @@index([createdAt])
+}
+
+model CommissionRule {
+  id            String                 @id @default(cuid())
+  name          String
+  basis         String
+  percentage    Decimal                @db.Decimal(7, 4)
+  effectiveFrom DateTime
+  effectiveTo   DateTime?
+  active        Boolean                @default(true)
+  createdById   String
+  allocations   CommissionAllocation[]
+  createdAt     DateTime               @default(now())
+}
+
+model CommissionAllocation {
+  id                 String              @id @default(cuid())
+  repairId           String
+  repair             RepairOrder         @relation(fields: [repairId], references: [id])
+  employeeId         String
+  employee           Employee            @relation(fields: [employeeId], references: [id])
+  ruleId             String?
+  rule               CommissionRule?     @relation(fields: [ruleId], references: [id])
+  ruleSnapshot       Json
+  baseAmount         Decimal             @db.Decimal(14, 2)
+  percentageSnapshot Decimal             @db.Decimal(7, 4)
+  amount             Decimal             @db.Decimal(14, 2)
+  paidAmount         Decimal             @default(0) @db.Decimal(14, 2)
+  status             CommissionStatus    @default(PENDING)
+  createdAt          DateTime            @default(now())
+  payments           CommissionPayment[]
+
+  @@unique([repairId, employeeId])
+}
+
+model CommissionPayment {
+  id             String               @id @default(cuid())
+  allocationId   String
+  allocation     CommissionAllocation @relation(fields: [allocationId], references: [id])
+  methodId       String
+  method         PaymentMethod        @relation(fields: [methodId], references: [id])
+  idempotencyKey String               @unique
+  amount         Decimal              @db.Decimal(14, 2)
+  userId         String
+  note           String?
+  createdAt      DateTime             @default(now())
+
+  @@index([allocationId, createdAt])
+}
+
+model FinancialAccount {
+  id       String          @id @default(cuid())
+  name     String
+  type     String
+  currency String          @default("HNL")
+  active   Boolean         @default(true)
+  methods  PaymentMethod[]
+}
+
+model Account {
+  id     String        @id @default(cuid())
+  code   String        @unique
+  name   String
+  type   String
+  active Boolean       @default(true)
+  lines  JournalLine[]
+}
+
+model JournalEntry {
+  id            String        @id @default(cuid())
+  number        Int           @unique @default(autoincrement())
+  description   String
+  referenceType String
+  referenceId   String
+  status        JournalStatus @default(POSTED)
+  lines         JournalLine[]
+  postedAt      DateTime      @default(now())
+  reversedById  String?
+
+  @@unique([referenceType, referenceId])
+  @@index([postedAt])
+}
+
+model JournalLine {
+  id        String       @id @default(cuid())
+  entryId   String
+  entry     JournalEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  accountId String
+  account   Account      @relation(fields: [accountId], references: [id])
+  debit     Decimal      @default(0) @db.Decimal(14, 2)
+  credit    Decimal      @default(0) @db.Decimal(14, 2)
+  memo      String?
+}
+
+model BusinessSetting {
+  id        String   @id @default("default")
+  name      String   @default("Servi Techno")
+  currency  String   @default("HNL")
+  timezone  String   @default("America/Tegucigalpa")
+  address   String?
+  phone     String?
+  email     String?
+  taxRate   Decimal  @default(0) @db.Decimal(7, 4)
+  updatedAt DateTime @updatedAt
+}
+
+model WarrantyPolicy {
+  id           String              @id
+  documentType ProductDocumentType
+  condition    ProductCondition
+  days         Int
+  version      Int                 @default(1)
+  title        String
+  conditions   Json
+  active       Boolean             @default(true)
+  updatedAt    DateTime            @updatedAt
+
+  @@unique([documentType, condition, version])
+}
+
+model BusinessDocument {
+  id              String       @id @default(cuid())
+  number          Int          @unique @default(autoincrement())
+  type            DocumentType
+  dedupKey        String       @unique
+  sourceType      String
+  sourceId        String
+  relatedItemId   String?
+  ownerUserId     String?
+  employeeId      String?
+  snapshot        Json
+  conditionsTitle String?
+  conditions      Json?
+  warrantyStart   DateTime?
+  warrantyEnd     DateTime?
+  createdById     String
+  createdAt       DateTime     @default(now())
+
+  @@index([sourceType, sourceId])
+  @@index([type, createdAt])
+  @@index([employeeId, createdAt])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id])
+  action     String
+  entityType String
+  entityId   String?
+  before     Json?
+  after      Json?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}

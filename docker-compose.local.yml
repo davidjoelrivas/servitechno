@@ -1,0 +1,75 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.local
+      target: api
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: ${LOCAL_DATABASE_URL:?Ejecute pnpm local:up o un comando local:use-*}
+      PORT: 3000
+      WEB_ORIGIN: http://localhost:5173
+      ASSISTANT_PROVIDER: ${ASSISTANT_PROVIDER:-ollama}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3:4b}
+      ASSISTANT_TIMEOUT_MS: ${ASSISTANT_TIMEOUT_MS:-90000}
+      ASSISTANT_PROPOSAL_TTL_MINUTES: ${ASSISTANT_PROPOSAL_TTL_MINUTES:-15}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-6-luna}
+      OPENAI_TIMEOUT_MS: ${OPENAI_TIMEOUT_MS:-60000}
+      OPENAI_MAX_REQUESTS_PER_MINUTE: ${OPENAI_MAX_REQUESTS_PER_MINUTE:-20}
+      OPENAI_MAX_INPUT_CHARS: ${OPENAI_MAX_INPUT_CHARS:-24000}
+    ports:
+      - "127.0.0.1:${LOCAL_API_PORT:-3010}:3000"
+    volumes:
+      - ${LOCAL_EVIDENCE_VOLUME:?Falta seleccionar el modo local}:/app/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.local
+      target: web
+      args:
+        VITE_API_URL: http://localhost:${LOCAL_API_PORT:-3010}/api
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5173:5173"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:5173/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      - servitechno_ollama:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+      start_period: 10s
+
+volumes:
+  servitechno_evidence:
+  servitechno_demo_evidence:
+  servitechno_ollama:
+
